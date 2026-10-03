@@ -1,0 +1,141 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>MathMate AI</title>
+<style>
+:root {
+  --bg:#070b18; --panel:rgba(16,25,45,.84); --panel2:rgba(28,42,70,.72);
+  --text:#f4f7ff; --muted:#9fb0c9; --cyan:#67e8f9; --violet:#a78bfa;
+  --border:rgba(255,255,255,.10);
+}
+*{box-sizing:border-box}
+body{
+  margin:0;min-height:100vh;color:var(--text);
+  font-family:Inter,system-ui,-apple-system,"Segoe UI",sans-serif;
+  background:
+    radial-gradient(circle at 12% 12%,rgba(103,232,249,.14),transparent 28%),
+    radial-gradient(circle at 88% 82%,rgba(167,139,250,.15),transparent 31%),
+    var(--bg);
+}
+.app{width:min(1080px,94vw);min-height:100vh;margin:auto;display:grid;grid-template-rows:auto 1fr auto}
+header{padding:22px 4px 14px;display:flex;align-items:center;justify-content:space-between;gap:16px}
+.brand{display:flex;align-items:center;gap:13px}
+.logo{width:48px;height:48px;border-radius:16px;display:grid;place-items:center;
+font-weight:900;color:#06101b;background:linear-gradient(135deg,var(--cyan),var(--violet));
+box-shadow:0 12px 40px rgba(103,232,249,.18)}
+h1{margin:0;font-size:1.12rem} .subtitle{margin-top:3px;color:var(--muted);font-size:.8rem}
+.badge{padding:8px 12px;border:1px solid var(--border);border-radius:999px;color:var(--muted);font-size:.73rem;background:#ffffff06}
+.chat{min-height:0;display:flex;flex-direction:column;border:1px solid var(--border);
+border-radius:25px;overflow:hidden;background:var(--panel);backdrop-filter:blur(20px);
+box-shadow:0 25px 80px rgba(0,0,0,.28)}
+#messages{flex:1;overflow:auto;padding:26px;display:flex;flex-direction:column;gap:14px}
+.msg{max-width:82%;padding:13px 16px;border-radius:18px;line-height:1.55;white-space:pre-wrap;word-break:break-word}
+.assistant{align-self:flex-start;background:var(--panel2);border:1px solid var(--border);border-bottom-left-radius:5px}
+.user{align-self:flex-end;background:linear-gradient(135deg,#2563eb,#7c3aed);border-bottom-right-radius:5px}
+.composer{padding:15px;border-top:1px solid var(--border);background:#03071266}
+form{display:flex;gap:10px}
+textarea{flex:1;resize:none;min-height:50px;max-height:150px;outline:0;border:1px solid var(--border);
+border-radius:15px;padding:14px;color:var(--text);background:#ffffff08;font:inherit}
+textarea:focus{border-color:rgba(103,232,249,.5)}
+button{border:0;border-radius:15px;padding:0 20px;font-weight:800;color:#06101b;
+background:linear-gradient(135deg,var(--cyan),#d8fbff);cursor:pointer}
+button:disabled{opacity:.5;cursor:not-allowed}
+.hint,footer{color:var(--muted);font-size:.7rem}
+.hint{margin:8px 3px 0}footer{text-align:center;padding:12px 4px 18px}
+@media(max-width:650px){.app{width:96vw}.badge{display:none}.msg{max-width:92%}#messages{padding:18px}}
+</style>
+</head>
+<body>
+<div class="app">
+<header>
+  <div class="brand">
+    <div class="logo">AI</div>
+    <div>
+      <h1>MathMate AI</h1>
+      <div class="subtitle">Mathematics problem-solving tutor • Gemini-powered</div>
+    </div>
+  </div>
+  <div class="badge">Study-focused</div>
+</header>
+
+<section class="chat">
+  <div id="messages">
+    <div class="msg assistant">Hi! I'm MathMate AI. Ask me a question related to mathematics problem-solving tutor.</div>
+  </div>
+  <div class="composer">
+    <form id="chat-form">
+      <textarea id="message" rows="1" placeholder="Ask your study question..." autocomplete="off"></textarea>
+      <button id="send" type="submit">Send</button>
+    </form>
+    <div class="hint">This assistant only answers questions within its configured study topic.</div>
+  </div>
+</section>
+<footer>Flask + Google Gemini API</footer>
+</div>
+
+<script>
+const messages = document.getElementById("messages");
+const form = document.getElementById("chat-form");
+const input = document.getElementById("message");
+const send = document.getElementById("send");
+const history = [];
+
+function addMessage(role, text, temporary=false) {
+  const el = document.createElement("div");
+  el.className = "msg " + role + (temporary ? " typing" : "");
+  el.textContent = text;
+  if (temporary) el.id = "typing";
+  messages.appendChild(el);
+  messages.scrollTop = messages.scrollHeight;
+}
+
+form.addEventListener("submit", async (event) => {
+  event.preventDefault();
+  const message = input.value.trim();
+  if (!message || send.disabled) return;
+
+  addMessage("user", message);
+  history.push({role:"user", content:message});
+  input.value = "";
+  input.style.height = "50px";
+  send.disabled = true;
+  addMessage("assistant", "Thinking…", true);
+
+  try {
+    const response = await fetch("/api/chat", {
+      method:"POST",
+      headers:{"Content-Type":"application/json"},
+      body:JSON.stringify({message, history})
+    });
+    const data = await response.json();
+    document.getElementById("typing")?.remove();
+
+    if (!response.ok) throw new Error(data.error || "Request failed");
+
+    addMessage("assistant", data.answer);
+    history.push({role:"assistant", content:data.answer});
+  } catch (error) {
+    document.getElementById("typing")?.remove();
+    addMessage("assistant", "Sorry, I couldn't process that request. Check your Gemini API configuration.");
+  } finally {
+    send.disabled = false;
+    input.focus();
+  }
+});
+
+input.addEventListener("input", () => {
+  input.style.height = "50px";
+  input.style.height = Math.min(input.scrollHeight,150) + "px";
+});
+
+input.addEventListener("keydown", (event) => {
+  if (event.key === "Enter" && !event.shiftKey) {
+    event.preventDefault();
+    form.requestSubmit();
+  }
+});
+</script>
+</body>
+</html>
